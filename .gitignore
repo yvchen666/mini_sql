@@ -1,0 +1,8 @@
+build/
+*.o
+*.db
+cmake_install.cmake
+CMakeCache.txt
+CMakeFiles/
+Makefile
+*.dSYM/
