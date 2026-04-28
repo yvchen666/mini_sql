@@ -41,16 +41,13 @@ SSD           ~100,000 ns      100,000x
 
 ## 第二步：确定编码顺序
 
-```
-编写顺序：
-
-1. Page 类（含 pin_count）  ← 在 Lesson 01 基础上增加引用计数
-   ↑
-2. LRUReplacer 类           ← 独立的替换算法组件
-   ↑
-3. BufferPoolManager 类     ← 组合 Page + LRUReplacer + 文件 I/O
-   ↑
-4. main.cpp                 ← 演示和验证
+```mermaid
+flowchart TD
+    A["1. Page 类（含 pin_count）\n在 Lesson 01 基础上增加引用计数"]
+    B["2. LRUReplacer 类\n独立的替换算法组件"]
+    C["3. BufferPoolManager 类\n组合 Page + LRUReplacer + 文件 I/O"]
+    D["4. main.cpp\n演示和验证"]
+    A --> B --> C --> D
 ```
 
 **为什么 LRUReplacer 要独立出来？**
@@ -66,22 +63,21 @@ SSD           ~100,000 ns      100,000x
 
 LRU 用**双向链表 + 哈希表**实现 O(1) 操作：
 
+```mermaid
+flowchart LR
+    subgraph lru["双向链表（头部=最近使用，尾部=最久未用）"]
+        n5["5"] <--> n3["3"] <--> n1["1"] <--> n2["2"]
+    end
+    note1["最近 Unpin"] -.-> n5
+    note2["最先被淘汰"] -.-> n2
 ```
-双向链表：维护访问时间顺序
-  头部（最近使用）                    尾部（最久未用）
-  ┌─────┐    ┌─────┐    ┌─────┐    ┌─────┐
-  │  5  │←→  │  3  │←→  │  1  │←→  │  2  │
-  └─────┘    └─────┘    └─────┘    └─────┘
-  最近 Unpin                        最先被 Unpin
 
-哈希表：frame_id → 链表中的位置（O(1) 查找）
-  { 5 → 节点5的位置, 3 → 节点3的位置, 1 → 节点1的位置, 2 → 节点2的位置 }
+哈希表：`{ 5→节点5位置, 3→节点3位置, 1→节点1位置, 2→节点2位置 }`
 
-操作：
-  Unpin(4)：把 4 加入链表头部 → [4→5→3→1→2]
-  Pin(3)：把 3 从链表中移除 → [4→5→1→2]
-  Victim()：取出链表尾部 2 → [4→5→1]，返回 2
-```
+操作示例：
+- `Unpin(4)` → 加入链表头部 → `[4→5→3→1→2]`
+- `Pin(3)` → 从链表移除 → `[4→5→1→2]`
+- `Victim()` → 取出尾部 `2` → `[4→5→1]`，返回 `2`
 
 ### 3.2 为什么要双向链表 + 哈希表？
 
@@ -181,31 +177,21 @@ void LRUReplacer::Unpin(frame_id_t frame_id) {
 
 ### 4.1 整体架构
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                    BufferPoolManager                      │
-│                                                           │
-│  上层调用                                                  │
-│  FetchPage(page_id)                                       │
-│  NewPage(&page_id)                                        │
-│  UnpinPage(page_id, is_dirty)                             │
-│                                                           │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │  frames_[0]  frames_[1]  frames_[2]  frames_[3]   │  │
-│  │  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐   │  │
-│  │  │Page 5  │  │Page 2  │  │ (空)   │  │Page 8  │   │  │
-│  │  │pin: 1  │  │pin: 0  │  │        │  │pin: 0  │   │  │
-│  │  │dirty:F │  │dirty:T │  │        │  │dirty:F │   │  │
-│  │  └────────┘  └────────┘  └────────┘  └────────┘   │  │
-│  └────────────────────────────────────────────────────┘  │
-│                                                           │
-│  page_table_: {5→0, 2→1, 8→3}                           │
-│  free_list_: [2]                                         │
-│  LRUReplacer: 候选列表 [1(Page2), 3(Page8)]              │
-│                                                           │
-│  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │
-│  磁盘文件：database.db                                    │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph BPM["BufferPoolManager"]
+        subgraph frames["frames_[0..3]"]
+            f0["frame 0\nPage 5\npin:1 dirty:F"]
+            f1["frame 1\nPage 2\npin:0 dirty:T"]
+            f2["frame 2\n(空)"]
+            f3["frame 3\nPage 8\npin:0 dirty:F"]
+        end
+        pt["page_table_\n{5→0, 2→1, 8→3}"]
+        fl["free_list_\n[2]"]
+        lru["LRUReplacer\n候选 [1(Page2), 3(Page8)]"]
+    end
+    db[("磁盘文件\ndatabase.db")]
+    BPM <-->|"读写"| db
 ```
 
 ### 4.2 核心数据结构
@@ -245,30 +231,25 @@ private:
 
 这是缓冲池最核心的函数：
 
-```
-FetchPage(page_id) 的执行流程：
+```mermaid
+flowchart TD
+    start(["FetchPage(page_id)"])
+    check1{"page 在缓冲池？"}
+    hit["命中！直接返回"]
+    check2{"有空闲帧？"}
+    usefree["用空闲帧\n加载页面"]
+    lru["LRU 淘汰一个帧\n若是脏页先写回磁盘"]
+    load["加载页面到帧\npin_count++\n更新 page_table_"]
+    done(["返回 Page 指针"])
 
-                  ┌─────────────┐
-                  │ page 在缓冲池? │
-                  └──────┬──────┘
-                    Yes/ \No
-                   /     \
-           ┌──────┐   ┌──────────────┐
-           │命中！ │   │ 有空闲帧?    │
-           │返回   │   └──────┬───────┘
-           └──────┘     Yes/ \No
-                      /     \
-              ┌──────────┐  ┌──────────────┐
-              │用空闲帧   │  │LRU淘汰一个帧  │
-              │加载页面   │  │（如果是脏页   │
-              └──────────┘  │ 先写回磁盘）  │
-                            └──────────────┘
-                                  │
-                            加载页面到帧
-                            pin_count++
-                            更新 page_table_
-                                  │
-                            返回 Page 指针
+    start --> check1
+    check1 -->|Yes| hit
+    check1 -->|No| check2
+    check2 -->|Yes| usefree
+    check2 -->|No| lru
+    usefree --> load
+    lru --> load
+    load --> done
 ```
 
 ### 4.4 Pin/Unpin 机制详解
@@ -399,25 +380,23 @@ make lesson02
 
 ## 本课知识点总结
 
-```
-你学到了：
+**你学到了：**
 
 概念层：
-  ✓ 缓冲池：内存中的页面缓存，减少磁盘 I/O
-  ✓ LRU 算法：淘汰最久未使用的页面
-  ✓ Pin/Unpin：引用计数机制，保护正在使用的页面
-  ✓ 脏页：被修改的页面，淘汰前必须写回磁盘
+- 缓冲池：内存中的页面缓存，减少磁盘 I/O
+- LRU 算法：淘汰最久未使用的页面
+- Pin/Unpin：引用计数机制，保护正在使用的页面
+- 脏页：被修改的页面，淘汰前必须写回磁盘
 
 数据结构：
-  ✓ 双向链表 + 哈希表 = O(1) 的 LRU 实现
-  ✓ page_table_：page_id → frame_id 的哈希映射
-  ✓ free_list_：空闲帧链表
+- 双向链表 + 哈希表 = O(1) 的 LRU 实现
+- `page_table_`：page_id → frame_id 的哈希映射
+- `free_list_`：空闲帧链表
 
 设计模式：
-  ✓ 策略模式：替换算法独立为 Replacer，可替换
-  ✓ 缓存模式：缓存命中 → 直接返回；未命中 → 加载到缓存
-  ✓ 引用计数：pin_count 管理页面的生命周期
-```
+- 策略模式：替换算法独立为 Replacer，可替换
+- 缓存模式：缓存命中 → 直接返回；未命中 → 加载到缓存
+- 引用计数：pin_count 管理页面的生命周期
 
 ---
 

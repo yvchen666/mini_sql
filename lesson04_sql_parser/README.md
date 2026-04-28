@@ -11,16 +11,16 @@
 
 当你输入 `SELECT name FROM users WHERE age > 25` 时，数据库要做这些事：
 
-```
-SQL 字符串                   词法分析                  语法分析
-"SELECT name               Token 序列               AST（树形结构）
- FROM users                [SELECT, name,            SelectStmt
- WHERE age > 25"            FROM, users,              ├── columns: [name]
-     │                      WHERE, age, >,            ├── table: users
-     │                      25, SEMICOLON]             └── where: age > 25
-     │                          │                          │
-     ▼                          ▼                          ▼
-  用户输入 ─────→ Lexer（词法分析）─────→ Parser（语法分析）──→ 执行器
+```mermaid
+flowchart LR
+    A["SQL 字符串\n'SELECT name\n FROM users\n WHERE age > 25'"]
+    B["Token 序列\n[SELECT, name,\n FROM, users,\n WHERE, age, >, 25]"]
+    C["AST\nSelectStmt\n├── columns: name\n├── table: users\n└── where: age > 25"]
+    D["执行器"]
+
+    A -->|Lexer\n词法分析| B
+    B -->|Parser\n语法分析| C
+    C --> D
 ```
 
 本课实现前两个阶段。
@@ -42,18 +42,14 @@ SQL 字符串                   词法分析                  语法分析
 
 ## 第二步：确定编码顺序
 
-```
-编写顺序：
-
-1. Token 定义 + TokenType 枚举  ← 最基础的：SQL 中的"词"有哪些类型
-   ↑
-2. AST 节点定义                ← 目标结构：解析后的结果长什么样
-   ↑
-3. Lexer（词法分析器）          ← 把字符串变成 Token 序列
-   ↑
-4. Parser（语法分析器）         ← 把 Token 序列变成 AST
-   ↑
-5. main.cpp                    ← 测试验证
+```mermaid
+flowchart TD
+    A["1. Token 定义 + TokenType 枚举\nSQL 中的词有哪些类型"]
+    B["2. AST 节点定义\n目标结构：解析后的结果长什么样"]
+    C["3. Lexer 词法分析器\n把字符串变成 Token 序列"]
+    D["4. Parser 语法分析器\n把 Token 序列变成 AST"]
+    E["5. main.cpp\n测试验证"]
+    A --> B --> C --> D --> E
 ```
 
 **为什么先定义 AST 再写 Parser？**
@@ -132,17 +128,24 @@ struct Token {
 
 AST（Abstract Syntax Tree，抽象语法树）是 SQL 的结构化表示：
 
-```
-SQL: SELECT name, age FROM users WHERE age > 25
+```mermaid
+flowchart TD
+    SS["SelectStmt"]
+    cols["columns"]
+    table["table"]
+    where["where"]
+    name["name"]
+    age_col["age"]
+    users["users"]
+    binop["BinaryOp(>)"]
+    colref["ColRef(age)"]
+    intlit["IntLit(25)"]
 
-AST：
-                    SelectStmt
-                   /     |      \
-          columns    table    where
-          /    \       |        |
-        name   age   users   BinaryOp(>)
-                            /      \
-                        ColRef(age)  IntLit(25)
+    SS --> cols & table & where
+    cols --> name & age_col
+    table --> users
+    where --> binop
+    binop --> colref & intlit
 ```
 
 ### 4.2 AST 节点设计
@@ -524,25 +527,23 @@ make lesson04
 
 ## 本课知识点总结
 
-```
-你学到了：
+**你学到了：**
 
 编译原理基础：
-  ✓ 词法分析（Lexing）：字符串 → Token 序列
-  ✓ 语法分析（Parsing）：Token 序列 → AST
-  ✓ 递归下降：每个语法规则一个函数，通过递归处理嵌套
-  ✓ 前瞻（Lookahead）：用当前 Token 决定走哪条分支
+- 词法分析（Lexing）：字符串 → Token 序列
+- 语法分析（Parsing）：Token 序列 → AST
+- 递归下降：每个语法规则一个函数，通过递归处理嵌套
+- 前瞻（Lookahead）：用当前 Token 决定走哪条分支
 
 代码结构：
-  ✓ Lexer：逐字符扫描，识别 Token 类型
-  ✓ Parser：递归下降，构建 AST
-  ✓ AST：树形结构，表示 SQL 的语义
+- Lexer：逐字符扫描，识别 Token 类型
+- Parser：递归下降，构建 AST
+- AST：树形结构，表示 SQL 的语义
 
 设计思想：
-  ✓ 关注点分离：Lexer 只管分词，Parser 只管结构
-  ✓ 不可变性：Token 一旦生成就不变
-  ✓ 错误恢复：遇到错误时报告位置和信息
-```
+- 关注点分离：Lexer 只管分词，Parser 只管结构
+- 不可变性：Token 一旦生成就不变
+- 错误恢复：遇到错误时报告位置和信息
 
 ---
 

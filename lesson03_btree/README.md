@@ -30,37 +30,32 @@
 
 ### 1.3 B+ 树结构概览
 
+```mermaid
+flowchart TD
+    root["[10 | 20]"]
+    l1["[3|7|10]"]
+    l2["[12|15|20]"]
+    l3["[25|30]"]
+    root --> l1 & l2 & l3
+    l1 -->|next| l2 -->|next| l3
 ```
-这是一棵 4 阶 B+ 树（每个节点最多 4 个键）：
-
-                    [10 | 20]
-                   /    |     \
-          [3|7|10]   [12|15|20]   [25|30]
-              ↑          ↑           ↑
-          叶子之间通过 next 指针相连（便于范围查询）：
-          [3|7|10] → [12|15|20] → [25|30]
 
 特征：
-  - 内部节点：只存 key，用来"导航"
-  - 叶子节点：存 key + value，是实际数据
-  - 叶子节点用链表串起来 → 范围查询超快
-```
+- **内部节点**：只存 key，用来"导航"
+- **叶子节点**：存 key + value，用链表串联（便于范围查询）
 
 ---
 
 ## 第二步：确定编码顺序
 
-```
-编写顺序：
-
-1. 节点基类 BTreeNode        ← 定义公共属性
-   ↑
-2. InternalNode（内部节点）   ← 只存 key + 子节点指针
-   LeafNode（叶子节点）       ← 存 key + value + next 指针
-   ↑
-3. BTree 类                  ← 组合节点，实现 Insert/Search/Delete
-   ↑
-4. main.cpp                  ← 测试验证
+```mermaid
+flowchart TD
+    A["1. 节点基类 BTreeNode\n定义公共属性"]
+    B["2a. InternalNode 内部节点\n只存 key + 子节点指针"]
+    C["2b. LeafNode 叶子节点\n存 key + value + next 指针"]
+    D["3. BTree 类\n组合节点，实现 Insert/Search/Delete"]
+    E["4. main.cpp\n测试验证"]
+    A --> B & C --> D --> E
 ```
 
 **为什么先定义节点，再写 BTree？**
@@ -74,15 +69,22 @@
 
 ### 3.1 为什么需要三种节点类型？
 
-```
-BTreeNode（基类）
-├── InternalNode（内部节点）
-│   存 key[] + children[]（子节点指针）
-│   作用：导航 —— "你要找的 key 在哪个子树里？"
-│
-└── LeafNode（叶子节点）
-    存 key[] + value[] + next（下一个叶子）
-    作用：存数据 —— "这是你要找的 key 对应的 value"
+```mermaid
+classDiagram
+    class BTreeNode {
+        +bool is_leaf
+        +vector~int~ keys
+        +BTreeNode* parent
+    }
+    class InternalNode {
+        +vector~BTreeNode*~ children
+    }
+    class LeafNode {
+        +vector~int~ values
+        +LeafNode* next
+    }
+    BTreeNode <|-- InternalNode : 内部节点\n只存 key + 子节点指针\n作用：导航
+    BTreeNode <|-- LeafNode : 叶子节点\n存 key + value + next\n作用：存数据
 ```
 
 ### 3.2 代码详解
@@ -375,28 +377,22 @@ make lesson03
 
 ## 本课知识点总结
 
-```
-你学到了：
+**你学到了：**
 
 概念层：
-  ✓ B+ 树：矮胖的多路搜索树，磁盘友好的索引结构
-  ✓ 内部节点：只存 key，用于导航
-  ✓ 叶子节点：存 key+value，用链表串联（支持范围查询）
-  ✓ 分裂：节点满时一分为二，中间 key 提升到父节点
-  ✓ 合并：节点太空时与兄弟合并
+- B+ 树：矮胖的多路搜索树，磁盘友好的索引结构
+- 内部节点：只存 key，用于导航
+- 叶子节点：存 key+value，用链表串联（支持范围查询）
+- 分裂：节点满时一分为二，中间 key 提升到父节点
+- 合并：节点太空时与兄弟合并
 
 算法层：
-  ✓ 查找：从根到叶子 O(log n)，叶内二分查找
-  ✓ 插入：插入叶子 → 溢出则分裂 → 可能递归到根
-  ✓ 删除：删除叶子 key → 下溢则借取或合并 → 可能递归到根
-  ✓ 范围查询：找到起始叶子，沿链表遍历
+- 查找：从根到叶子 O(log n)，叶内二分查找
+- 插入：插入叶子 → 溢出则分裂 → 可能递归到根
+- 删除：删除叶子 key → 下溢则借取或合并 → 可能递归到根
+- 范围查询：找到起始叶子，沿链表遍历
 
-复杂度：
-  ✓ 查找：O(log n)
-  ✓ 插入：O(log n)
-  ✓ 删除：O(log n)
-  ✓ 范围查询：O(log n + k)，k 是结果数量
-```
+复杂度：查找 O(log n)、插入 O(log n)、删除 O(log n)、范围查询 O(log n + k)
 
 ---
 

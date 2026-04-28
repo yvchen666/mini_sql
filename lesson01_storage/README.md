@@ -17,33 +17,28 @@
 
 ### 1.2 什么是 Page（页面）
 
-```
-Page = 数据库中数据管理的最小单位
-     = 一块固定大小的连续字节（我们用 4096 字节 = 4KB）
-
-┌─────────────────── Page（4096 字节）───────────────────┐
-│                                                          │
-│  byte[0]   byte[1]   byte[2]   ...   byte[4095]         │
-│                                                          │
-└──────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Page["Page（4096 字节）"]
+        b0["byte[0]"] --- b1["byte[1]"] --- b2["byte[2]"] --- dots["..."] --- b4095["byte[4095]"]
+    end
 ```
 
 ### 1.3 数据库文件的结构
 
 数据库在磁盘上就是一个普通文件，但它的内容被划分成等大的 Page：
 
+```mermaid
+flowchart LR
+    p0["Page 0\n4KB\noffset=0"]
+    p1["Page 1\n4KB\noffset=4096"]
+    p2["Page 2\n4KB\noffset=8192"]
+    p3["Page 3\n4KB\noffset=12288"]
+    p4["..."]
+    p0 --- p1 --- p2 --- p3 --- p4
 ```
-database.db 文件：
 
-┌────────┬────────┬────────┬────────┬────────┐
-│ Page 0 │ Page 1 │ Page 2 │ Page 3 │  ...   │
-│ 4KB    │ 4KB    │ 4KB    │ 4KB    │        │
-└────────┴────────┴────────┴────────┴────────┘
- ↑        ↑        ↑
-offset=0  offset=4096  offset=8192
-
-计算公式：offset = page_id × PAGE_SIZE
-```
+计算公式：`offset = page_id × PAGE_SIZE`
 
 每个 Page 有一个编号（page_id），通过编号可以直接算出它在文件中的偏移量。这种设计叫做**堆文件（Heap File）**。
 
@@ -61,14 +56,12 @@ offset=0  offset=4096  offset=8192
 
 写代码要有顺序，先写底层，再写上层：
 
-```
-编写顺序：
-
-1. Page 类        ← 最底层，表示一个数据页
-   ↑
-2. DiskManager 类 ← 在 Page 之上，负责读写磁盘文件
-   ↑
-3. main.cpp       ← 使用 DiskManager 进行演示
+```mermaid
+flowchart TD
+    A["1. Page 类\n最底层，表示一个数据页"]
+    B["2. DiskManager 类\n在 Page 之上，负责读写磁盘文件"]
+    C["3. main.cpp\n使用 DiskManager 进行演示"]
+    A --> B --> C
 ```
 
 **为什么这个顺序？**
@@ -302,26 +295,16 @@ void DiskManager::ReadPage(page_id_t page_id, char* page_data) {
 
 ### 4.4 整体数据流
 
-```
-用户写入 "Hello World" 到 Page 0：
+```mermaid
+flowchart TD
+    A(["用户数据 'Hello World'"])
+    B["Page 对象\nchar data_[4096] = 'Hello World\\0...'"]
+    C["文件操作\nseekp(0), write(4096 bytes)"]
+    D["database.db 磁盘文件\nPage 0 (4KB): Hello World..."]
 
-  用户数据 "Hello World"
-       │
-       ▼
-  ┌─────────────┐
-  │   Page 对象  │  char data_[4096] = "Hello World\0..."
-  └──────┬──────┘
-         │ DiskManager.WritePage(0, page.GetData())
-         ▼
-  ┌─────────────┐
-  │  文件操作     │  seekp(0), write(4096 bytes)
-  └──────┬──────┘
-         │
-         ▼
-  ┌─────────────┐
-  │ database.db │  [Hello World\0\0\0...][...................]
-  │  磁盘文件    │  ← Page 0 (4KB) →     ← Page 1 尚不存在 →
-  └─────────────┘
+    A --> B
+    B -->|"DiskManager.WritePage(0, page.GetData())"| C
+    C --> D
 ```
 
 ---
@@ -374,26 +357,24 @@ make lesson01
 
 ## 本课知识点总结
 
-```
-你学到了：
+**你学到了：**
 
 概念层：
-  ✓ 数据库用"页面"（Page）作为数据管理的最小单位
-  ✓ 页面大小对齐磁盘 I/O 块大小（4KB）
-  ✓ 数据库文件 = N 个 Page 首尾相连
-  ✓ 通过 page_id × PAGE_SIZE 可以直接定位到文件的任意位置
+- 数据库用"页面"（Page）作为数据管理的最小单位
+- 页面大小对齐磁盘 I/O 块大小（4KB）
+- 数据库文件 = N 个 Page 首尾相连
+- 通过 `page_id × PAGE_SIZE` 可以直接定位到文件的任意位置
 
 代码层：
-  ✓ Page 类：封装数据 + 元数据（page_id, is_dirty）
-  ✓ DiskManager 类：管理磁盘文件的读写
-  ✓ 文件操作：open/seek/read/write/flush
-  ✓ 错误处理：文件不存在时创建，读取失败时清零
+- `Page` 类：封装数据 + 元数据（page_id, is_dirty）
+- `DiskManager` 类：管理磁盘文件的读写
+- 文件操作：open/seek/read/write/flush
+- 错误处理：文件不存在时创建，读取失败时清零
 
 设计思想：
-  ✓ 自底向上开发：先 Page → 再 DiskManager → 最后 main
-  ✓ 固定大小设计：Page 大小固定，简化计算和管理
-  ✓ 脏标记机制：后续缓冲池会用到
-```
+- 自底向上开发：先 Page → 再 DiskManager → 最后 main
+- 固定大小设计：Page 大小固定，简化计算和管理
+- 脏标记机制：后续缓冲池会用到
 
 ---
 

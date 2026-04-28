@@ -19,45 +19,23 @@ Lesson 05: Catalog + Executor        → 查询执行
 
 ### 1.1 整体架构
 
-```
-用户输入 SQL
-     │
-     ▼
-┌──────────────────────────────────────────────────┐
-│                   REPL（交互循环）                 │
-│  "sql>" 提示符 → 读取 SQL → 执行 → 打印结果       │
-└──────────────┬───────────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────────────┐
-│              Lexer + Parser                       │
-│  SQL 字符串 → Token 序列 → AST                    │
-└──────────────┬───────────────────────────────────┘
-               │ AST
-               ▼
-┌──────────────────────────────────────────────────┐
-│              ExecutionEngine                      │
-│  根据 AST 类型选择执行路径：                        │
-│  ├── CREATE TABLE → Catalog.CreateTable           │
-│  ├── DROP TABLE   → Catalog.DropTable             │
-│  ├── INSERT       → Catalog + B+Tree              │
-│  └── SELECT       → 构建 Executor 算子树           │
-└──────────────┬───────────────────────────────────┘
-               │
-               ▼
-┌──────────────────────────────────────────────────┐
-│              Catalog（元数据 + 数据）               │
-│  ├── Schema 管理（表结构）                          │
-│  ├── 数据存储（行数据）                              │
-│  └── 持久化（保存/加载）                             │
-└──────────────┬───────────────────────────────────┘
-               │ 读写磁盘
-               ▼
-┌──────────────────────────────────────────────────┐
-│           磁盘文件                                 │
-│  ├── schemas.txt  （表结构定义）                    │
-│  └── {table}.dat  （每张表的数据文件）               │
-└──────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    user(["用户输入 SQL"])
+    repl["REPL 交互循环\n'sql>' 提示符 → 读取 SQL → 执行 → 打印结果"]
+    parser["Lexer + Parser\nSQL 字符串 → Token 序列 → AST"]
+    engine["ExecutionEngine\n根据 AST 类型选择执行路径"]
+    create["CREATE TABLE\n→ Catalog.CreateTable"]
+    drop["DROP TABLE\n→ Catalog.DropTable"]
+    insert["INSERT\n→ Catalog + B+Tree"]
+    select["SELECT\n→ 构建 Executor 算子树"]
+    catalog["Catalog\n元数据 + 数据 + 持久化"]
+    disk[("磁盘文件\nschemas.txt\n{table}.dat")]
+
+    user --> repl --> parser -->|AST| engine
+    engine --> create & drop & insert & select
+    create & drop & insert & select --> catalog
+    catalog <-->|读写磁盘| disk
 ```
 
 ---
@@ -66,29 +44,16 @@ Lesson 05: Catalog + Executor        → 查询执行
 
 整合工作要**从内到外**：
 
-```
-整合顺序：
-
-1. 整合基础组件
-   ├── Page（Lesson 01）
-   ├── DiskManager（Lesson 01）
-   ├── LRUReplacer（Lesson 02）
-   └── BufferPoolManager（Lesson 02）
-
-2. 整合存储层
-   ├── B+ Tree（Lesson 03）
-   └── Catalog（Lesson 05，扩展持久化）
-
-3. 整合查询层
-   ├── Lexer + Parser + AST（Lesson 04）
-   └── Executor（Lesson 05，扩展为完整执行引擎）
-
-4. 整合交互层
-   └── REPL（新增：交互式命令行）
-
-5. 整合持久化
-   ├── Schema 保存/加载
-   └── 数据保存/加载
+```mermaid
+flowchart TD
+    subgraph 整合顺序
+        g1["1. 整合基础组件\nPage · DiskManager · LRUReplacer · BufferPoolManager"]
+        g2["2. 整合存储层\nB+Tree · Catalog（扩展持久化）"]
+        g3["3. 整合查询层\nLexer + Parser + AST · Executor（完整执行引擎）"]
+        g4["4. 整合交互层\nREPL 交互式命令行"]
+        g5["5. 整合持久化\nSchema 保存/加载 · 数据保存/加载"]
+    end
+    g1 --> g2 --> g3 --> g4 --> g5
 ```
 
 ---
@@ -442,62 +407,44 @@ make lesson06
 
 ## 本课知识点总结
 
-```
-你学到了：
+**你学到了：**
 
 系统集成：
-  ✓ 如何将独立组件整合成完整系统
-  ✓ 模块间接口设计（Lexer → Parser → Executor → Catalog）
-  ✓ 错误传播和全局异常处理
+- 如何将独立组件整合成完整系统
+- 模块间接口设计（Lexer → Parser → Executor → Catalog）
+- 错误传播和全局异常处理
 
 持久化：
-  ✓ Schema 的文本格式存储
-  ✓ 数据的二进制格式存储
-  ✓ 程序启动时的数据恢复
-  ✓ 程序退出时的自动保存
+- Schema 的文本格式存储
+- 数据的二进制格式存储
+- 程序启动时的数据恢复
+- 程序退出时的自动保存
 
 交互设计：
-  ✓ REPL 模式：读取-求值-打印-循环
-  ✓ 多行 SQL 支持
-  ✓ 元命令系统
-  ✓ 格式化输出
+- REPL 模式：读取-求值-打印-循环
+- 多行 SQL 支持
+- 元命令系统
+- 格式化输出
 
-完整数据流：
-  用户输入 SQL
-    → Lexer 词法分析
-    → Parser 语法分析
-    → AST
-    → ExecutionEngine 分发
-    → Catalog 查找元数据
-    → Executor 构建算子树
-    → 执行并返回结果
-    → 格式化打印
-    → （可选）持久化到磁盘
-```
+完整数据流：用户输入 SQL → Lexer 词法分析 → Parser 语法分析 → AST → ExecutionEngine 分发 → Catalog 查找元数据 → Executor 构建算子树 → 执行并返回结果 → 格式化打印 → （可选）持久化到磁盘
 
 ---
 
 ## 课程总回顾
 
-```
-恭喜你完成了整个课程！
-
-6 节课的知识地图：
-
-Lesson 01 存储引擎      ──→ 磁盘上的页面管理
-Lesson 02 缓冲池        ──→ 内存中的页面缓存
-Lesson 03 B+ 树         ──→ 高效的索引结构
-Lesson 04 SQL 解析器    ──→ SQL 字符串到 AST
-Lesson 05 查询执行器    ──→ 火山模型算子执行
-Lesson 06 完整 MVP      ──→ 整合 + 持久化 + REPL
-
-你现在理解了数据库引擎的核心组件：
-  1. 存储层：Page + DiskManager
-  2. 缓冲层：BufferPool + LRU
-  3. 索引层：B+ Tree
-  4. 解析层：Lexer + Parser + AST
-  5. 执行层：Volcano Model Executors
-  6. 元数据：Catalog + Persistence
+```mermaid
+flowchart LR
+    L1["Lesson 01\n存储引擎\n磁盘页面管理"]
+    L2["Lesson 02\n缓冲池\n内存页面缓存"]
+    L3["Lesson 03\nB+ 树\n高效索引结构"]
+    L4["Lesson 04\nSQL 解析器\nSQL字符串到AST"]
+    L5["Lesson 05\n查询执行器\n火山模型算子执行"]
+    L6["Lesson 06\n完整 MVP\n整合+持久化+REPL"]
+    L1 --> L6
+    L2 --> L6
+    L3 --> L6
+    L4 --> L6
+    L5 --> L6
 ```
 
 ---

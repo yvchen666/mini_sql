@@ -10,21 +10,19 @@
 
 ### 1.1 查询执行的全流程
 
-```
-                    本课的内容
-                    ┌─────────────────────┐
-                    ▼                     │
-SQL 字符串 → Lexer → Parser → AST → ExecutionEngine → 结果
-                                      │
-                              ┌───────┴───────┐
-                              │               │
-                         算子树构建        数据存取
-                              │               │
-                    ┌─────────┼─────────┐    │
-                    │         │         │    │
-                Projection  Filter   SeqScan  Catalog
-                              │                   │
-                         WHERE 条件          表定义+数据
+```mermaid
+flowchart LR
+    SQL["SQL 字符串"] -->|Lexer+Parser| AST
+    subgraph 本课内容
+        AST --> EE["ExecutionEngine"]
+        EE --> ops["算子树构建"]
+        EE --> data["数据存取"]
+        ops --> proj["Projection"]
+        ops --> filt["Filter\nWHERE 条件"]
+        ops --> scan["SeqScan"]
+        data --> cat["Catalog\n表定义+数据"]
+    end
+    EE --> result(["结果"])
 ```
 
 Lesson 04 产出了 AST，本课要把 AST 变成可以执行的算子。
@@ -52,26 +50,18 @@ Lesson 04 产出了 AST，本课要把 AST 变成可以执行的算子。
 
 ## 第二步：确定编码顺序
 
-```
-编写顺序：
-
-1. 基础类型：Value, ColumnDef, Schema, Tuple
-   ↑
-2. Catalog + TableData（元数据和数据存储）
-   ↑
-3. 算子基类 ExecutorBase
-   ↑
-4. SeqScanExecutor（全表扫描）     ← 最基本的算子
-   ↑
-5. FilterExecutor（过滤）          ← 在 SeqScan 上加过滤
-   ↑
-6. ProjectionExecutor（投影）      ← 在 Filter 上加列选择
-   ↑
-7. InsertExecutor（插入）
-   ↑
-8. ExecutionEngine（执行引擎）     ← 把算子组合成算子树
-   ↑
-9. main.cpp
+```mermaid
+flowchart TD
+    A["1. 基础类型\nValue, ColumnDef, Schema, Tuple"]
+    B["2. Catalog + TableData\n元数据和数据存储"]
+    C["3. 算子基类 ExecutorBase"]
+    D["4. SeqScanExecutor\n全表扫描（最基本）"]
+    E["5. FilterExecutor\n在 SeqScan 上加过滤"]
+    F["6. ProjectionExecutor\n在 Filter 上加列选择"]
+    G["7. InsertExecutor\n插入执行"]
+    H["8. ExecutionEngine\n把算子组合成算子树"]
+    I["9. main.cpp"]
+    A --> B --> C --> D --> E --> F --> G --> H --> I
 ```
 
 **为什么先写 SeqScan，再写 Filter，最后写 Projection？**
@@ -134,15 +124,13 @@ using Tuple = std::vector<Value>;
 
 ### 3.3 类型关系图
 
-```
-Schema 定义表的"形状"：
-  Schema: users { id:INT, name:TEXT, age:INT }
-            ↓ 对应
-  Tuple:   [1,     "Alice",    30    ]
-  Tuple:   [2,     "Bob",      25    ]
-  Tuple:   [3,     "Charlie",  35    ]
-
-  所有 Tuple 都遵循同一个 Schema
+```mermaid
+flowchart TD
+    subgraph schema["Schema: users { id:INT, name:TEXT, age:INT }"]
+        t1["Tuple: [1, 'Alice', 30]"]
+        t2["Tuple: [2, 'Bob', 25]"]
+        t3["Tuple: [3, 'Charlie', 35]"]
+    end
 ```
 
 ---
@@ -151,14 +139,13 @@ Schema 定义表的"形状"：
 
 ### 4.1 Catalog 的角色
 
-```
-Catalog = 数据库的"户口本"
-记录：有哪些表？每个表长什么样？数据在哪？
-
-Catalog
-├── "users"  → TableData { schema + 所有行 }
-├── "orders" → TableData { schema + 所有行 }
-└── ...
+```mermaid
+flowchart TD
+    subgraph Catalog
+        u["users → TableData\nschema + rows"]
+        o["orders → TableData\nschema + rows"]
+        d["..."]
+    end
 ```
 
 ### 4.2 代码详解
@@ -326,23 +313,19 @@ private:
 
 ### 5.5 算子树的构建
 
-```
-SQL: SELECT name, age FROM users WHERE age > 25
-
-算子树：
-  ProjectionExecutor [name, age]     ← 最上层：选择输出列
-       │
-  FilterExecutor [age > 25]          ← 中层：过滤
-       │
-  SeqScanExecutor [users]            ← 底层：扫描表
-
-执行过程（自上而下调用 Next()）：
-  1. Projection.Next()
-  2. → Filter.Next()
-  3. → SeqScan.Next() → row [1, "Alice", 30]
-  4. ← Filter 检查 30 > 25 → true → 传给 Projection
-  5. Projection 取 [1] 和 [2] → ["Alice", 30]
-  6. 返回给调用者
+```mermaid
+flowchart TD
+    subgraph 算子树["SQL: SELECT name, age FROM users WHERE age > 25"]
+        proj["ProjectionExecutor\n选择输出列 [name, age]"]
+        filt["FilterExecutor\nWHERE age > 25"]
+        scan["SeqScanExecutor\n扫描 users 表"]
+    end
+    caller(["调用者"]) -->|"Next()"| proj
+    proj -->|"Next()"| filt
+    filt -->|"Next()"| scan
+    scan -->|"row [1, Alice, 30]"| filt
+    filt -->|"30>25 ✓ 传递"| proj
+    proj -->|"取[1][2] → [Alice,30]"| caller
 ```
 
 ---
@@ -454,27 +437,25 @@ make lesson05
 
 ## 本课知识点总结
 
-```
-你学到了：
+**你学到了：**
 
 架构模式：
-  ✓ 火山模型：每个算子有 Init/Next/Close 接口
-  ✓ 拉取模型：上层通过 Next() 从下层拉取数据
-  ✓ 算子组合：算子可以像积木一样自由组合
+- 火山模型：每个算子有 Init/Next/Close 接口
+- 拉取模型：上层通过 Next() 从下层拉取数据
+- 算子组合：算子可以像积木一样自由组合
 
 代码结构：
-  ✓ Catalog：管理表的元数据和数据
-  ✓ SeqScanExecutor：全表扫描
-  ✓ FilterExecutor：WHERE 条件过滤
-  ✓ ProjectionExecutor：SELECT 列选择
-  ✓ InsertExecutor：INSERT 执行
-  ✓ ExecutionEngine：构建和执行算子树
+- Catalog：管理表的元数据和数据
+- SeqScanExecutor：全表扫描
+- FilterExecutor：WHERE 条件过滤
+- ProjectionExecutor：SELECT 列选择
+- InsertExecutor：INSERT 执行
+- ExecutionEngine：构建和执行算子树
 
 设计思想：
-  ✓ 策略模式：不同算子实现统一接口
-  ✓ 组合模式：算子可以嵌套组合
-  ✓ 关注点分离：每个算子只做一件事
-```
+- 策略模式：不同算子实现统一接口
+- 组合模式：算子可以嵌套组合
+- 关注点分离：每个算子只做一件事
 
 ---
 
